@@ -76,6 +76,7 @@ ASUBSCR -up-> UC8
 - Persistence 
     - MySQL
     - Redis
+    - MongoDB
 
 - Reporting
     - Apache Hive
@@ -178,27 +179,25 @@ actor "Subscriber" <<Person>> as ASUBSCR
 actor "Workforce" <<Person>> as AWF
 
 folder "Tokyo" as CQS {
-    package "Web" {
+    package "Spring MVC Application" {
         interface HTTP as HTTPF
         interface HTTPS as HTTPSF
         HTTPF -down- [Spring Boot Security]
         [Spring Boot Security] -right-> [Spring Boot MVC]
         [Spring Boot MVC] -up-> HTTPSF
+        [Spring Boot MVC] -> [Vaadin] 
     }
-    package "Commands API" {
+    package "Spring Web Application" {
         interface HTTPS as HTTPSA
         HTTPSA -down-> [Spring Boot Web]
-        [Spring Boot Web] -left-> [Spring Data JPA]
+        [Spring Boot Web] -down-> [Spring Data JPA]
+        [Spring Boot Web] -down-> [Spring Data Mongodb]
+    }
+    package "CDN" {
     }
     database "MySQL" {
-        folder "Users" {
-        }
-        folder "Roles" {
-        }
-        folder "Quizzes"{
-        }
-        folder "Subscriptions"{
-        }
+    }
+    database "MongoDB" {
     }
 }
 
@@ -206,7 +205,9 @@ AU -down-> HTTPF
 AEXPR -down-> HTTPSF
 ASUBSCR -down-> HTTPSF
 AWF -down-> HTTPSF
-[Spring Boot MVC] ..> HTTPSA : CRUD commands 
+[Spring Boot MVC] ..> HTTPSA : CRUD commands (HTTPS)
+[Spring Data JPA] ..> MySQL : CRUD data (JDBC/SQL, port 3306)
+[Spring Data Mongodb] ..> MongoDB : CRUD quiz templates (Mongo DB Wire Protocol, port 27017)
 
 note left of HTTPF
     Allows anonymous users to sign up,
