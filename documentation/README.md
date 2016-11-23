@@ -78,6 +78,9 @@ ASUBSCR -up-> UC8
     - Redis
     - MongoDB
 
+- Messaging
+    - Rabbitmq
+    
 - Reporting
     - Apache Hive
     - Apache Spark
@@ -96,24 +99,24 @@ ASUBSCR -up-> UC8
 - Source tracking 
     - Stash 
     
-- Release automation
+- Deployment automation
     - Travis CI / Jenkins
     - Bamboo
     - Nexus
 
 - Target platform 
-    - Cloud Foundry
-    - Docker 
-    - Zookeeper (service registry)
+    - Pivotal Cloud Foundry
+    - Pivotal Big Data Suite
+
+- Configuration:    
     - Git (boot configuration)
    
 - Security 
     - CAS (Apereo)
     
-- Client
-    - Windows 
-    - Web / Node.js / Angular / SockJS
-    - Vaadin (admin console) 
+- Clients
+    - Node.js / Angular / SockJS
+    - Vaadin / Vaadin TouchKit
     - iOS / Android / Windows Phone
     
 - Protocol
@@ -126,11 +129,11 @@ ASUBSCR -up-> UC8
 
 @startuml
 
-actor "Developer" <<User>> as ADEV
-actor "Expert" <<User>> as AEXPR
-actor "Subscriber" <<User>> as ASUBSCR
-actor "Workforce" <<User>> as AWF
-actor "Anonymous" <<User>> as AU
+actor "Developer" <<Person>> as ADEV
+actor "Expert" <<Person>> as AEXPR
+actor "Subscriber" <<Person>> as ASUBSCR
+actor "Workforce" <<Person>> as AWF
+actor "Anonymous" <<Person>> as AU
 
 component "Tokyo" <<Software System>> as CQS
 
@@ -173,54 +176,97 @@ UC5 -down-> CQS
 
 @startuml
 
-actor "Anonymous" <<Person>> as AU
-actor "Expert" <<Person>> as AEXPR
-actor "Subscriber" <<Person>> as ASUBSCR
-actor "Workforce" <<Person>> as AWF
+rectangle "Bamboo" {
+}
+rectangle "Web Browser" as WB {
+}
+rectangle "Mobile" as MB {
+}
+rectangle "Portal" as Portal {
+}
 
 folder "Tokyo" as CQS {
-    package "Spring MVC Application" {
-        interface HTTP as HTTPF
-        interface HTTPS as HTTPSF
-        HTTPF -down- [Spring Boot Security]
-        [Spring Boot Security] -right-> [Spring Boot MVC]
-        [Spring Boot MVC] -up-> HTTPSF
-        [Spring Boot MVC] -> [Vaadin] 
+    rectangle "Web Application \n[Container: Vaadin]\n\nSupply users with\n UI to \nsign up, \nlogin, \nwork with profile,\nquizzes and \nnotifications operations" as CWA {
     }
-    package "Spring Web Application" {
-        interface HTTPS as HTTPSA
-        HTTPSA -down-> [Spring Boot Web]
-        [Spring Boot Web] -down-> [Spring Data JPA]
-        [Spring Boot Web] -down-> [Spring Data Mongodb]
+    rectangle "Commands Application\n [Container: Spring Boot Web,\nEmbedded Jetty,\n Spring Boot Security,\n CAS (Apereo)]\n\nREST commands API \nallows to manage business entities:\nusers, quiz contents and translations (templates), \nsubscriptions etc." as CCAPI {
     }
-    package "CDN" {
+    rectangle "Reports Application\n [Container: Rabbitmq,\n HDFS,\n Apache Spark,\n Apache Hive,\n Spring XD]\n\n Allows to generate aggregated \n quizzes resulting reports and statistics\n and streaming notifications to other services." as CQAPI {
     }
-    database "MySQL" {
+    rectangle "Static content folder\n [Container: CDN]\n\n Stores images, videos etc." as CDN {
     }
-    database "MongoDB" {
+    database "RDBMS [Container: MySQL]\n\n Stores users,\n quizzes content,\n assignments,\n results,\n subscriptions,\n feedback" as MySQL {
+    }
+    database "NoSQL [Container: MongoDB]\n\n Stores quizzes\n multilingual templates,\n notification templates  " as MongoDB {
+    }
+    database "NoSQL [Container: Hive]\n\n Stores aggregated quizzes\n passing results and\n feedback statistics" as Hive {
+    }
+    rectangle "Configuration [Container: Git]\n\n Stores bootstrap properties." as GIT {
     }
 }
 
-AU -down-> HTTPF
-AEXPR -down-> HTTPSF
-ASUBSCR -down-> HTTPSF
-AWF -down-> HTTPSF
-[Spring Boot MVC] ..> HTTPSA : CRUD commands (HTTPS)
-[Spring Data JPA] ..> MySQL : CRUD data (JDBC/SQL, port 3306)
-[Spring Data Mongodb] ..> MongoDB : CRUD quiz templates (Mongo DB Wire Protocol, port 27017)
+Bamboo -down-> CQS: Uses [HTTPS]
+WB -down-> CWA: Uses [HTTPS]
+MB -down-> CWA: Uses [WebSockets]
+Portal -down-> CWA: Uses [HTTPS]
 
-note left of HTTPF
-    Allows anonymous users to sign up,
-    browse unsecured content
-end note
-note right of HTTPSF
-   Allows users to login,
-   conduct secured operations allowed by the certain role
-end note
-note right of HTTPSA
-   REST commands allows to manage business entities:
-   users, quiz contents, subscriptions etc.
-end note
+CWA -down-> CCAPI: Uses [HTTPS]
+CCAPI -left-> CQAPI: Uses [TCP, port 5672] 
+
+CCAPI -down-> MySQL : Uses [JDBC/SQL, port 3306]
+CCAPI -down-> MongoDB : CRUD quiz templates\n [Mongo DB Wire Protocol, port 27017]
+CWA -right-> CDN: Uses [HTTPS]
+CWA -down-> CQAPI: CRUD data [HTTPS]
+CQAPI -down-> Hive: CRUD data [JDBC/HQL, port 10000]
  
- 
+
+CWA -down-> GIT: Uses [HTTPS]
+CCAPI -down-> GIT: Uses [HTTPS]
+
+@enduml
+
+### Component diagram
+
+#### Web Application
+
+@startuml
+
+rectangle "Web Browser" as WB {
+}
+rectangle "Mobile" as MB {
+}
+rectangle "Portal" as Portal {
+}
+rectangle "Static content folder\n [Container: CDN]\n\n Stores images, videos etc." as CDN {
+}
+    
+folder "Web Application" as CWA {
+    rectangle "UI Component\n [Component: Vaadin Web UI, Vaadin TouchKit]\n\n Provides UI layout and events listeners, \nDefines entities for UI model" as WACUI {   
+    }
+    rectangle "Service Component\n [Component: Spring Beans, Spring Services]\n\n Communication layer\n with internal other services" as WACSC{
+    }
+    WB -down-> WACUI
+    MB -down-> WACUI
+    Portal -down-> WACUI
+    WACUI -down-> CDN: References\n to resources: [HTTP]
+    WACUI .down.> WACSC : maven: <dependency>
+}
+
+@enduml
+
+#### Commands Application
+
+@startuml 
+
+rectangle "Configuration [Container: Git]\n\n Stores bootstrap properties." as GIT {
+}
+
+folder "Commands Application" as CCA {
+    rectangle "Spring Web\n [Container: Spring Beans,\n Spring Web,\n Spring Security]\n\n Provides REST API to manage\n data repositories and business flows" as CCAAPI {
+    }
+    rectangle "Configuration\n [Component: Spring Beans,\n Spring Cloud Config]\n\n integrates GIT based\n configuration into application" as CCACFG {   
+    }
+    CCACFG -right-> GIT
+    CCAAPI .down.> CCACFG : maven: <dependency>
+}
+
 @enduml
